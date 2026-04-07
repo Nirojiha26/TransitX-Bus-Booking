@@ -1,7 +1,7 @@
 import { useState, createContext, useContext } from 'react';
 
 // Common store (context or simple state)
-export const StoreContext = createContext(null);
+export const StoreContext = createContext<any>(null);
 
 export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
   const [appState, setAppState] = useState({ initialized: true });
