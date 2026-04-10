@@ -52,7 +52,7 @@ const VerifyOTPScreen = ({ route, navigation }: any) => {
         if (role === 'travel') {
           navigation.replace('ClassifyBus');
         } else if (role === 'driver') {
-          navigation.replace('DriverHome');
+          navigation.replace('BusDetails');
         } else {
           navigation.replace('Home');
         }

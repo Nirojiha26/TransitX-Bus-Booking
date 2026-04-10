@@ -6,7 +6,7 @@ const BASE_URL = 'https://travel-backend-api-t25i.onrender.com';
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000, // 15 seconds before giving up
+  timeout: 45000, // 45 seconds to handle Render's cold starts
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
