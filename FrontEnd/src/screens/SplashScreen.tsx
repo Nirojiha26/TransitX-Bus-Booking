@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { Colors } from '../constants/Colors';
 
 const { width } = Dimensions.get('window');
 
@@ -54,7 +55,7 @@ const SplashScreen = () => {
           } else if (hasLaunched === null) {
             // Case 2: First time ever opening the app
             AsyncStorage.setItem('hasLaunched', 'true');
-            navigation.replace('Register');
+            navigation.replace('Welcome');
           } else {
             // Case 3: App was downloaded before, but user is logged out
             navigation.replace('Login');
@@ -122,7 +123,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 48,
     fontWeight: 'bold',
-    color: '#FF6F00',
+    color: Colors.primary,
     letterSpacing: 1,
   },
 });
