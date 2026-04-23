@@ -24,19 +24,21 @@ const LoginScreen = ({ navigation }: any) => {
   const [isFocused, setIsFocused] = useState(false);
 
   const handleLogin = async () => {
-    console.log('🚀 [LoginScreen] Attempting login for:', phone);
-    if (!validatePhone(phone)) {
+    const trimmedPhone = phone.trim();
+    console.log('[LoginScreen] Attempting login for:', trimmedPhone);
+
+    if (!validatePhone(trimmedPhone)) {
       return Alert.alert('Invalid Phone', 'Please enter a valid 9 or 10 digit number.');
     }
 
     setLoading(true);
     try {
-      await authService.sendOtp(phone);
-      console.log('✅ [LoginScreen] OTP Sent');
-      navigation.navigate('VerifyOTP', { phone });
+      await authService.sendOtp(trimmedPhone);
+      console.log('[LoginScreen] OTP Sent');
+      navigation.navigate('VerifyOTP', { phone: trimmedPhone });
     } catch (error: any) {
-      console.error('❌ [LoginScreen] Login Error:', error);
-      if (error.status === 404 || error.message?.includes('not found')) {
+      console.error('[LoginScreen] Login Error:', error);
+      if (error.message?.includes('not found') || error.message?.includes('404')) {
         Alert.alert('Account Not Found', 'This number is not registered.', [
           { text: 'Cancel' },
           { text: 'Register', onPress: () => navigation.navigate('Register') },
@@ -57,7 +59,7 @@ const LoginScreen = ({ navigation }: any) => {
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
 
       <View style={styles.orangeScreen}>
-        {/* --- Top Section: Smaller height to reduce gap --- */}
+        {/* Top Section */}
         <View style={styles.topSection}>
           <View style={styles.blobTL} />
           <View style={styles.blobBR} />
@@ -70,7 +72,7 @@ const LoginScreen = ({ navigation }: any) => {
           <Text style={styles.pageTitle}>TRANSITX</Text>
         </View>
 
-        {/* --- White Sheet: Negative margin creates the overlap --- */}
+        {/* White Sheet */}
         <View style={styles.whiteSheet}>
           <ScrollView
             keyboardShouldPersistTaps="handled"

@@ -13,7 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from '../services/apiClient';
+import { authService } from '../services/authService';
 import { Colors } from '../constants/Colors';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { wp, hp, fs } from '../utils/responsive';
@@ -25,21 +25,18 @@ const VerifyOTPScreen = ({ route, navigation }: any) => {
   const [isFocused, setIsFocused] = useState(false);
 
   const handleVerify = async () => {
-    if (code.length < 4) {
+    const trimmedCode = code.trim();
+    if (trimmedCode.length < 5) {
       return Alert.alert(
         'Invalid Code',
-        'Please enter the full verification code.',
+        'Please enter the full 5 or 6 digit verification code.',
       );
     }
 
     setLoading(true);
     try {
-      const response = await apiClient.post('/verify', {
-        phone: phone,
-        code: code,
-      });
-
-      const { token, role } = response.data;
+      const data = await authService.verifyOtp(phone, trimmedCode);
+      const { token, role } = data;
 
       if (token) {
         await AsyncStorage.setItem('userToken', token);
@@ -47,15 +44,22 @@ const VerifyOTPScreen = ({ route, navigation }: any) => {
           await AsyncStorage.setItem('userRole', role);
         }
 
-        Alert.alert('Success', 'Logged in successfully!');
-
-        if (role === 'travel') {
-          navigation.replace('ClassifyBus');
-        } else if (role === 'driver') {
-          navigation.replace('BusDetails');
-        } else {
-          navigation.replace('Home');
-        }
+        Alert.alert('Success', 'Logged in successfully!', [
+          {
+            text: 'OK',
+            onPress: () => {
+              console.log('🎯 [VerifyOTP] Navigating for role:', role);
+              // Since all details (including Bus Details for drivers) are now handled 
+              // during registration, everyone can go straight to Home.
+              navigation.replace('Home');
+            },
+          },
+        ]);
+      } else {
+        // Fallback if token is missing but no error was thrown
+        Alert.alert('Login Success', 'Redirecting to Home...', [
+          { text: 'OK', onPress: () => navigation.replace('Home') }
+        ]);
       }
     } catch (error: any) {
       const errorData = error.response?.data;
