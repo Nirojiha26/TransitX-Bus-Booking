@@ -84,7 +84,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "0.002"
     }
     signingConfigs {
         debug {
@@ -112,11 +112,18 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
-implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation("com.google.firebase:firebase-analytics")
+    
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
     }
+    
+    // ─── PLUTO 2.x CONFIGURATION ───
+    debugImplementation "com.plutolib:pluto:2.2.0"
+    debugImplementation "com.plutolib.plugins:network:2.2.0"
+    // Use this specific interceptor artifact for 2.x
+    debugImplementation "com.plutolib.plugins:network-interceptor-okhttp:2.2.0"
 }
