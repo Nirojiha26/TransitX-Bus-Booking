@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import MainButton from '../components/MainButton';
 import { Colors } from '../constants/Colors';
+import { authService } from '../services/authService';
 
 const HomeScreen = () => {
   const navigation =
@@ -24,7 +25,14 @@ const HomeScreen = () => {
   const handleLogout = async () => {
     console.log('🚪 [HomeScreen] Logging out...');
     try {
-      // Clear all auth data to fix the session vulnerability
+      // 1. Call backend logout API
+      try {
+        await authService.logout();
+      } catch (err) {
+        console.warn(' [HomeScreen] Backend logout failed, clearing local storage anyway');
+      }
+
+      // 2. Clear all auth data to fix the session vulnerability
       await Promise.all([
         AsyncStorage.removeItem('userToken'),
         AsyncStorage.removeItem('userRole'),
@@ -49,17 +57,10 @@ const HomeScreen = () => {
         <Text style={styles.welcomeText}>Welcome back!</Text>
         <Text style={styles.subtitle}>Your smart bus booking solution</Text>
 
-        {role === 'travel' ? (
-          <MainButton
-            title="Manage My Buses"
-            onPress={() => console.log('Navigating to Fleet Management')}
-          />
-        ) : (
-          <MainButton
-            title="Book a Bus"
-            onPress={() => console.log('Booking logic goes here')}
-          />
-        )}
+        <MainButton
+          title="Book a Bus"
+          onPress={() => console.log('Booking logic goes here')}
+        />
       </View>
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
