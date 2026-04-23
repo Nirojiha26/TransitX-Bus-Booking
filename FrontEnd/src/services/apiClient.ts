@@ -1,31 +1,42 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
-// The 'Home Address' of your buddy's backend
-const BASE_URL = 'https://travel-backend-api-t25i.onrender.com';
+// Update to use the latest IP/URL provided
+const BASE_URL = 'http://34.100.210.108'; 
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 45000, // 45 seconds to handle Render's cold starts
+  timeout: 60000, // ⬆️ Increased to 60s to handle Render/Server lag
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
 
-// We will add the 401 Interceptor here in the next sub-task 
-// to handle the "Token Expired" vulnerability you mentioned.
+apiClient.interceptors.request.use(
+  async (config) => {
+    const token = await AsyncStorage.getItem('userToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    console.log(`[Pluto] Outgoing ${config.method?.toUpperCase()} to ${config.url}`);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-export default apiClient;
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`[Pluto] Response ${response.status} from ${response.config.url}`);
+    return response;
+  },
   async (error) => {
     if (error.response && error.response.status === 401) {
-      // Token expired!
+      console.error('[Pluto] 401 Unauthorized - Clearing Session');
       await AsyncStorage.removeItem('userToken');
-      // You can trigger a navigation reset to Login here 
-      // or use an event listener in your AppNavigator.
     }
     return Promise.reject(error);
   }
 );
+
+export default apiClient;
