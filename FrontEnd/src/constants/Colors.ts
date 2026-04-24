@@ -1,9 +1,7 @@
 export const Colors = {
-  primary: '#007AFF',
-  secondary: '#5856D6',
-  background: '#F2F2F7',
+  primary: '#E4643B', 
+  background: '#FFFFFF',
   text: '#000000',
-  white: '#FFFFFF',
-  error: '#FF3B30',
-  success: '#34C759',
+  error: '#FF0000',
+  inputBackground: '#F5F5F5',
 };
