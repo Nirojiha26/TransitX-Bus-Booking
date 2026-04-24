@@ -1,12 +1,5 @@
 # IDE settings
 .idea
-*.iml
-
-# macOS specific
-.DS_Store
-
-# IDE settings
-.idea
 .idea/
 .vscode/
 *.iml

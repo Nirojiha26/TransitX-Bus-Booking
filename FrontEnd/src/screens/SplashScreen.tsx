@@ -1,8 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Animated, Easing, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, Animated, Easing, Dimensions, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { Colors } from '../constants/Colors';
 
 const { width } = Dimensions.get('window');
 
@@ -12,6 +14,7 @@ const SplashScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
+    // 1. Start Animations
     // Drive across the screen
     Animated.loop(
       Animated.timing(moveAnim, {
@@ -22,7 +25,7 @@ const SplashScreen = () => {
       })
     ).start();
 
-    // Subtle bounce to simulate engine running/road bumps
+    // Subtle bounce to simulate road bumps
     Animated.loop(
       Animated.sequence([
         Animated.timing(bounceAnim, {
@@ -38,12 +41,33 @@ const SplashScreen = () => {
       ])
     ).start();
 
-    // Navigate to Home after 4 seconds
-    const timer = setTimeout(() => {
-      navigation.replace('Home');
-    }, 4000);
+    // 2. Logic to decide which screen to show
+    const checkUserStatus = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        const hasLaunched = await AsyncStorage.getItem('hasLaunched');
 
-    return () => clearTimeout(timer);
+        // Allow animation to run for 3.5 seconds before navigating
+        setTimeout(() => {
+          if (userToken) {
+            // Case 1: Session exists
+            navigation.replace('Home');
+          } else if (hasLaunched === null) {
+            // Case 2: First time ever opening the app
+            AsyncStorage.setItem('hasLaunched', 'true');
+            navigation.replace('Welcome');
+          } else {
+            // Case 3: App was downloaded before, but user is logged out
+            navigation.replace('Login');
+          }
+        }, 3500);
+      } catch (error) {
+        console.error("Auth check failed", error);
+        navigation.replace('Register');
+      }
+    };
+
+    checkUserStatus();
   }, [moveAnim, bounceAnim, navigation]);
 
   return (
@@ -65,6 +89,7 @@ const SplashScreen = () => {
   );
 };
 
+// Reusable Bus Component
 const BusIcon = () => (
   <View style={{ width: 80, height: 50, alignItems: 'center' }}>
     <View style={{
@@ -98,7 +123,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 48,
     fontWeight: 'bold',
-    color: '#FF6F00',
+    color: Colors.primary,
     letterSpacing: 1,
   },
 });
