@@ -1,0 +1,938 @@
+diff --git a/FrontEnd/android/app/build.gradle b/FrontEnd/android/app/build.gradle
+index b67b19c..288a63b 100644
+--- a/FrontEnd/android/app/build.gradle
++++ b/FrontEnd/android/app/build.gradle
+@@ -84,7 +84,7 @@ android {
+         minSdkVersion rootProject.ext.minSdkVersion
+         targetSdkVersion rootProject.ext.targetSdkVersion
+         versionCode 1
+-        versionName "1.0"
++        versionName "0.002"
+     }
+     signingConfigs {
+         debug {
+@@ -112,11 +112,18 @@ dependencies {
+     // The version of react-native is set by the React Native Gradle Plugin
+     implementation("com.facebook.react:react-android")
+ 
+-implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
++    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+     implementation("com.google.firebase:firebase-analytics")
++    
+     if (hermesEnabled.toBoolean()) {
+         implementation("com.facebook.react:hermes-android")
+     } else {
+         implementation jscFlavor
+     }
+-}
++    
++    // ─── PLUTO 2.x CONFIGURATION ───
++    debugImplementation "com.plutolib:pluto:2.2.0"
++    debugImplementation "com.plutolib.plugins:network:2.2.0"
++    // Use this specific interceptor artifact for 2.x
++    debugImplementation "com.plutolib.plugins:network-interceptor-okhttp:2.2.0"
++}
+\ No newline at end of file
+diff --git a/FrontEnd/android/app/src/main/AndroidManifest.xml b/FrontEnd/android/app/src/main/AndroidManifest.xml
+index fb78f39..2cf89a3 100644
+--- a/FrontEnd/android/app/src/main/AndroidManifest.xml
++++ b/FrontEnd/android/app/src/main/AndroidManifest.xml
+@@ -1,6 +1,8 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ 
+     <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
++    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+ 
+     <application
+       android:name=".MainApplication"
+diff --git a/FrontEnd/android/app/src/main/java/com/frontend/MainActivity.kt b/FrontEnd/android/app/src/main/java/com/frontend/MainActivity.kt
+index 26a5d14..c5fd30f 100644
+--- a/FrontEnd/android/app/src/main/java/com/frontend/MainActivity.kt
++++ b/FrontEnd/android/app/src/main/java/com/frontend/MainActivity.kt
+@@ -1,11 +1,24 @@
+ package com.frontend
+-
++import android.os.Bundle
++import android.content.Intent
++import android.net.Uri
++import android.provider.Settings
+ import com.facebook.react.ReactActivity
+ import com.facebook.react.ReactActivityDelegate
+ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
+ import com.facebook.react.defaults.DefaultReactActivityDelegate
+ 
+ class MainActivity : ReactActivity() {
++  override fun onCreate(savedInstanceState: Bundle?) {
++    super.onCreate(savedInstanceState)
++    if (!Settings.canDrawOverlays(this)) {
++      val intent = Intent(
++        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
++        Uri.parse("package:$packageName")
++      )
++      startActivity(intent)
++    }
++  }
+ 
+   /**
+    * Returns the name of the main component registered from JavaScript. This is used to schedule
+diff --git a/FrontEnd/android/app/src/main/java/com/frontend/MainApplication.kt b/FrontEnd/android/app/src/main/java/com/frontend/MainApplication.kt
+index a13584e..eac6064 100644
+--- a/FrontEnd/android/app/src/main/java/com/frontend/MainApplication.kt
++++ b/FrontEnd/android/app/src/main/java/com/frontend/MainApplication.kt
+@@ -7,6 +7,14 @@ import com.facebook.react.ReactHost
+ import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
+ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
+ 
++// --- CORRECT PLUTO IMPORTS ---
++import com.pluto.Pluto
++import com.pluto.plugins.network.PlutoNetworkPlugin
++import com.pluto.plugins.network.okhttp.PlutoOkhttpInterceptor 
++import com.facebook.react.modules.network.OkHttpClientProvider
++import com.facebook.react.modules.network.OkHttpClientFactory
++import okhttp3.OkHttpClient
++
+ class MainApplication : Application(), ReactApplication {
+ 
+   override val reactHost: ReactHost by lazy {
+@@ -14,14 +22,30 @@ class MainApplication : Application(), ReactApplication {
+       context = applicationContext,
+       packageList =
+         PackageList(this).packages.apply {
+-          // Packages that cannot be autolinked yet can be added manually here, for example:
+-          // add(MyReactNativePackage())
++          // Packages that cannot be autolinked yet can be added manually here
+         },
+     )
+   }
+ 
+   override fun onCreate() {
+     super.onCreate()
++    
++    // --- 1. INITIALIZE PLUTO (2.2.0 Syntax) ---
++    Pluto.Installer(this)
++        .addPlugin(PlutoNetworkPlugin())
++        .install()
++    Pluto.showNotch(true)
++
++    // --- 2. SETUP NETWORK INTERCEPTOR ---
++    OkHttpClientProvider.setOkHttpClientFactory(object : OkHttpClientFactory {
++        override fun createNewNetworkModuleClient(): OkHttpClient {
++            android.util.Log.d("PlutoInit", "Creating new OkHttpClient with PlutoInterceptor")
++            return OkHttpClientProvider.createClientBuilder()
++                .addInterceptor(PlutoOkhttpInterceptor)
++                .build()
++        }
++    })
++
+     loadReactNative(this)
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/FrontEnd/android/gradle.properties b/FrontEnd/android/gradle.properties
+index 9afe615..b3723ed 100644
+--- a/FrontEnd/android/gradle.properties
++++ b/FrontEnd/android/gradle.properties
+@@ -11,6 +11,7 @@
+ # The setting is particularly useful for tweaking memory settings.
+ # Default value: -Xmx512m -XX:MaxMetaspaceSize=256m
+ org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
++org.gradle.java.home=/opt/homebrew/Cellar/openjdk@17/17.0.18/libexec/openjdk.jdk/Contents/Home
+ 
+ # When configured, Gradle will run in incubating parallel mode.
+ # This option should only be used with decoupled projects. More details, visit
+diff --git a/FrontEnd/package.json b/FrontEnd/package.json
+index bf851cf..06b7785 100644
+--- a/FrontEnd/package.json
++++ b/FrontEnd/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "FrontEnd",
++  "name": "frontend",
+   "version": "0.0.1",
+   "private": true,
+   "scripts": {
+diff --git a/FrontEnd/src/assets/images/onboarding.png b/FrontEnd/src/assets/images/onboarding.png
+index 6d600d3..402376c 100644
+Binary files a/FrontEnd/src/assets/images/onboarding.png and b/FrontEnd/src/assets/images/onboarding.png differ
+diff --git a/FrontEnd/src/navigation/AppNavigator.tsx b/FrontEnd/src/navigation/AppNavigator.tsx
+index 3af4f83..7d9fe42 100644
+--- a/FrontEnd/src/navigation/AppNavigator.tsx
++++ b/FrontEnd/src/navigation/AppNavigator.tsx
+@@ -7,6 +7,7 @@ import RegisterScreen from '../screens/RegisterScreen';
+ import LoginScreen from '../screens/LoginScreen'; 
+ import VerifyOTPScreen from '../screens/VerifyOTPScreen'; 
+ import BusDetailsScreen from '../screens/BusDetailsScreen';
++import ClassifyBusScreen from '../screens/ClassifyBusScreen';
+ 
+ export type RootStackParamList = {
+   Splash: undefined;
+@@ -15,6 +16,7 @@ export type RootStackParamList = {
+   Login: undefined;
+   VerifyOTP: { phone: string };
+   BusDetails: undefined;
++  ClassifyBus: undefined;
+   Home: undefined;
+ };
+ 
+@@ -35,11 +37,12 @@ const AppNavigator = () => {
+       
+       {/* Auth Screens */}
+       <Stack.Screen name="Register" component={RegisterScreen} />
+-      { <Stack.Screen name="Login" component={LoginScreen} /> }
+-      { <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} /> }
++      <Stack.Screen name="Login" component={LoginScreen} />
++      <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} />
+ 
+       {/* Main App Screens */}
+       <Stack.Screen name="BusDetails" component={BusDetailsScreen} />
++      <Stack.Screen name="ClassifyBus" component={ClassifyBusScreen} />
+       <Stack.Screen name="Home" component={HomeScreen} />
+     </Stack.Navigator>
+   );
+diff --git a/FrontEnd/src/screens/BusDetailsScreen.tsx b/FrontEnd/src/screens/BusDetailsScreen.tsx
+index 3a3903a..189c9e2 100644
+--- a/FrontEnd/src/screens/BusDetailsScreen.tsx
++++ b/FrontEnd/src/screens/BusDetailsScreen.tsx
+@@ -60,8 +60,9 @@ const BusDetailsScreen = ({ navigation }: any) => {
+         busType,
+         seatType,
+       });
+-      Alert.alert('Success', 'Profile setup complete!');
+-      navigation.replace('Home');
++      Alert.alert('Success', 'Profile setup complete!', [
++        { text: 'OK', onPress: () => navigation.replace('Home') }
++      ]);
+     } catch (error: any) {
+       Alert.alert('Error', error.message || 'Failed to save details');
+     } finally {
+diff --git a/FrontEnd/src/screens/HomeScreen.tsx b/FrontEnd/src/screens/HomeScreen.tsx
+index 06bee78..da7529e 100644
+--- a/FrontEnd/src/screens/HomeScreen.tsx
++++ b/FrontEnd/src/screens/HomeScreen.tsx
+@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+ import { RootStackParamList } from '../navigation/AppNavigator';
+ import MainButton from '../components/MainButton';
+ import { Colors } from '../constants/Colors';
++import { authService } from '../services/authService';
+ 
+ const HomeScreen = () => {
+   const navigation =
+@@ -24,7 +25,14 @@ const HomeScreen = () => {
+   const handleLogout = async () => {
+     console.log('🚪 [HomeScreen] Logging out...');
+     try {
+-      // Clear all auth data to fix the session vulnerability
++      // 1. Call backend logout API
++      try {
++        await authService.logout();
++      } catch (err) {
++        console.warn(' [HomeScreen] Backend logout failed, clearing local storage anyway');
++      }
++
++      // 2. Clear all auth data to fix the session vulnerability
+       await Promise.all([
+         AsyncStorage.removeItem('userToken'),
+         AsyncStorage.removeItem('userRole'),
+@@ -49,17 +57,10 @@ const HomeScreen = () => {
+         <Text style={styles.welcomeText}>Welcome back!</Text>
+         <Text style={styles.subtitle}>Your smart bus booking solution</Text>
+ 
+-        {role === 'travel' ? (
+-          <MainButton
+-            title="Manage My Buses"
+-            onPress={() => console.log('Navigating to Fleet Management')}
+-          />
+-        ) : (
+-          <MainButton
+-            title="Book a Bus"
+-            onPress={() => console.log('Booking logic goes here')}
+-          />
+-        )}
++        <MainButton
++          title="Book a Bus"
++          onPress={() => console.log('Booking logic goes here')}
++        />
+       </View>
+ 
+       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+diff --git a/FrontEnd/src/screens/LoginScreen.tsx b/FrontEnd/src/screens/LoginScreen.tsx
+index 83b8717..7521a8e 100644
+--- a/FrontEnd/src/screens/LoginScreen.tsx
++++ b/FrontEnd/src/screens/LoginScreen.tsx
+@@ -24,19 +24,21 @@ const LoginScreen = ({ navigation }: any) => {
+   const [isFocused, setIsFocused] = useState(false);
+ 
+   const handleLogin = async () => {
+-    console.log('🚀 [LoginScreen] Attempting login for:', phone);
+-    if (!validatePhone(phone)) {
++    const trimmedPhone = phone.trim();
++    console.log('[LoginScreen] Attempting login for:', trimmedPhone);
++
++    if (!validatePhone(trimmedPhone)) {
+       return Alert.alert('Invalid Phone', 'Please enter a valid 9 or 10 digit number.');
+     }
+ 
+     setLoading(true);
+     try {
+-      await authService.sendOtp(phone);
+-      console.log('✅ [LoginScreen] OTP Sent');
+-      navigation.navigate('VerifyOTP', { phone });
++      await authService.sendOtp(trimmedPhone);
++      console.log('[LoginScreen] OTP Sent');
++      navigation.navigate('VerifyOTP', { phone: trimmedPhone });
+     } catch (error: any) {
+-      console.error('❌ [LoginScreen] Login Error:', error);
+-      if (error.status === 404 || error.message?.includes('not found')) {
++      console.error('[LoginScreen] Login Error:', error);
++      if (error.message?.includes('not found') || error.message?.includes('404')) {
+         Alert.alert('Account Not Found', 'This number is not registered.', [
+           { text: 'Cancel' },
+           { text: 'Register', onPress: () => navigation.navigate('Register') },
+@@ -57,7 +59,7 @@ const LoginScreen = ({ navigation }: any) => {
+       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+ 
+       <View style={styles.orangeScreen}>
+-        {/* --- Top Section: Smaller height to reduce gap --- */}
++        {/* Top Section */}
+         <View style={styles.topSection}>
+           <View style={styles.blobTL} />
+           <View style={styles.blobBR} />
+@@ -70,7 +72,7 @@ const LoginScreen = ({ navigation }: any) => {
+           <Text style={styles.pageTitle}>TRANSITX</Text>
+         </View>
+ 
+-        {/* --- White Sheet: Negative margin creates the overlap --- */}
++        {/* White Sheet */}
+         <View style={styles.whiteSheet}>
+           <ScrollView
+             keyboardShouldPersistTaps="handled"
+diff --git a/FrontEnd/src/screens/RegisterScreen.tsx b/FrontEnd/src/screens/RegisterScreen.tsx
+index bdf2f15..0a2b55e 100644
+--- a/FrontEnd/src/screens/RegisterScreen.tsx
++++ b/FrontEnd/src/screens/RegisterScreen.tsx
+@@ -24,45 +24,97 @@ import { Colors } from '../constants/Colors';
+ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+ import { wp, hp, fs } from '../utils/responsive';
+ 
+-const ROLES: { label: string; value: 'passenger' | 'driver' | 'travel' }[] = [
++const ROLES: { label: string; value: 'passenger' | 'driver' }[] = [
+   { label: 'Passenger', value: 'passenger' },
+   { label: 'Driver', value: 'driver' },
+-  { label: 'Travel Agency', value: 'travel' },
++];
++
++const BUS_TYPES = [
++  { label: 'Luxury', value: 'luxury' },
++  { label: 'Semi-Luxury', value: 'semi-luxury' },
++  { label: 'Normal', value: 'normal' },
++];
++
++const SEAT_TYPES = [
++  { label: '49 Seats', value: '49' },
++  { label: '40 Seats', value: '40' },
++  { label: '29 Seats', value: '29' },
++  { label: '14 Seats', value: '14' },
+ ];
+ 
+ const RegisterScreen = ({ navigation }: any) => {
+   const [username, setUsername] = useState('');
+   const [email, setEmail] = useState('');
+   const [phone, setPhone] = useState('');
+-  const [role, setRole] = useState<'passenger' | 'driver' | 'travel' | ''>('');
++  const [role, setRole] = useState<'passenger' | 'driver' | ''>('');
+   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+   const [loading, setLoading] = useState(false);
+ 
++  // --- Bus Details (For Drivers) ---
++  const [busName, setBusName] = useState('');
++  const [busNo, setBusNo] = useState('');
++  const [busType, setBusType] = useState('');
++  const [seatType, setSeatType] = useState('');
++  const [busTypeModalOpen, setBusTypeModalOpen] = useState(false);
++  const [seatTypeModalOpen, setSeatTypeModalOpen] = useState(false);
++
+   // Focus tracking state
+   const [focusedField, setFocusedField] = useState<string | null>(null);
+ 
+-  const selectedRoleLabel =
+-    ROLES.find(r => r.value === role)?.label ?? '';
++  const selectedRoleLabel = ROLES.find(r => r.value === role)?.label ?? '';
++  const selectedBusTypeLabel = BUS_TYPES.find(t => t.value === busType)?.label ?? '';
++  const selectedSeatTypeLabel = SEAT_TYPES.find(s => s.value === seatType)?.label ?? '';
+ 
+   const handleRegister = async () => {
+-    if (!validateUsername(username)) {
++    const trimmedUsername = username.trim();
++    const trimmedEmail = email.trim();
++    const trimmedPhone = phone.trim();
++
++    if (!validateUsername(trimmedUsername)) {
+       return Alert.alert('Error', 'Name must be at least 3 characters');
+     }
+-    if (!validatePhone(phone)) {
+-      return Alert.alert('Error', 'Phone must be 9–10 digits');
++    if (!validatePhone(trimmedPhone)) {
++      return Alert.alert('Error', 'Phone must be a valid 9 or 10 digit number');
+     }
+-    if (!validateEmail(email)) {
+-      return Alert.alert('Error', 'Please enter a valid email');
++    if (!validateEmail(trimmedEmail)) {
++      return Alert.alert('Error', 'Please enter a valid email address');
+     }
+     if (!role) {
+       return Alert.alert('Error', 'Please select your role');
+     }
+ 
++    if (role === 'driver') {
++      if (!busName.trim()) return Alert.alert('Error', 'Please enter bus name');
++      if (!busNo.trim()) return Alert.alert('Error', 'Please enter bus number');
++      if (!busType) return Alert.alert('Error', 'Please select bus type');
++      if (!seatType) return Alert.alert('Error', 'Please select seat count');
++    }
++
+     setLoading(true);
+     try {
+-      await authService.register(username, phone, email, role as any);
+-      Alert.alert('Success', `OTP sent! Registered as ${role}`);
+-      navigation.navigate('VerifyOTP', { phone });
++      await authService.register(
++        trimmedUsername, 
++        trimmedPhone, 
++        trimmedEmail, 
++        role as any,
++        role === 'driver' ? busName : undefined,
++        role === 'driver' ? busNo : undefined,
++        role === 'driver' ? busType : undefined,
++        role === 'driver' ? seatType : undefined
++      );
++      
++      // Automatically trigger OTP send after registration
++      try {
++        await authService.sendOtp(trimmedPhone);
++      } catch (otpError) {
++        console.warn('Registration succeeded but OTP failed to send automatically:', otpError);
++      }
++
++      Alert.alert(
++        'Success', 
++        `Registered as ${role}! Please verify your phone number.`,
++        [{ text: 'OK', onPress: () => navigation.navigate('VerifyOTP', { phone: trimmedPhone }) }]
++      );
+     } catch (error: any) {
+       Alert.alert('Registration Failed', error.message || 'Something went wrong');
+     } finally {
+@@ -82,7 +134,7 @@ const RegisterScreen = ({ navigation }: any) => {
+     >
+       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+ 
+-      {/* ════════════ Role Dropdown Modal ════════════ */}
++      {/* Role Dropdown Modal */}
+       <Modal
+         visible={roleDropdownOpen}
+         transparent
+@@ -128,10 +180,86 @@ const RegisterScreen = ({ navigation }: any) => {
+         </TouchableOpacity>
+       </Modal>
+ 
+-      {/* ════════════ Full orange background ════════════ */}
++      {/* Bus Type Modal */}
++      <Modal
++        visible={busTypeModalOpen}
++        transparent
++        animationType="fade"
++        onRequestClose={() => setBusTypeModalOpen(false)}
++      >
++        <TouchableOpacity
++          style={styles.modalOverlay}
++          activeOpacity={1}
++          onPress={() => setBusTypeModalOpen(false)}
++        >
++          <View style={styles.dropdownModal}>
++            <Text style={styles.dropdownTitle}>Select Bus Type</Text>
++            <FlatList
++              data={BUS_TYPES}
++              keyExtractor={item => item.value}
++              renderItem={({ item }) => (
++                <TouchableOpacity
++                  style={[styles.dropdownItem, item.value === busType && styles.dropdownItemActive]}
++                  onPress={() => {
++                    setBusType(item.value);
++                    setBusTypeModalOpen(false);
++                  }}
++                >
++                  <Text style={[styles.dropdownItemText, item.value === busType && styles.dropdownItemTextActive]}>
++                    {item.label}
++                  </Text>
++                  {item.value === busType && (
++                    <MaterialIcons name="check-circle" size={20} color={Colors.primary} />
++                  )}
++                </TouchableOpacity>
++              )}
++            />
++          </View>
++        </TouchableOpacity>
++      </Modal>
++
++      {/* Seat Type Modal */}
++      <Modal
++        visible={seatTypeModalOpen}
++        transparent
++        animationType="fade"
++        onRequestClose={() => setSeatTypeModalOpen(false)}
++      >
++        <TouchableOpacity
++          style={styles.modalOverlay}
++          activeOpacity={1}
++          onPress={() => setSeatTypeModalOpen(false)}
++        >
++          <View style={styles.dropdownModal}>
++            <Text style={styles.dropdownTitle}>Select Seat Count</Text>
++            <FlatList
++              data={SEAT_TYPES}
++              keyExtractor={item => item.value}
++              renderItem={({ item }) => (
++                <TouchableOpacity
++                  style={[styles.dropdownItem, item.value === seatType && styles.dropdownItemActive]}
++                  onPress={() => {
++                    setSeatType(item.value);
++                    setSeatTypeModalOpen(false);
++                  }}
++                >
++                  <Text style={[styles.dropdownItemText, item.value === seatType && styles.dropdownItemTextActive]}>
++                    {item.label}
++                  </Text>
++                  {item.value === seatType && (
++                    <MaterialIcons name="check-circle" size={20} color={Colors.primary} />
++                  )}
++                </TouchableOpacity>
++              )}
++            />
++          </View>
++        </TouchableOpacity>
++      </Modal>
++
++      {/* Full orange background */}
+       <View style={styles.orangeScreen}>
+ 
+-        {/* ── Top orange area: icon + title ── */}
++        {/* Top orange area */}
+         <View style={styles.topSection}>
+           <View style={styles.blobTL} />
+           <View style={styles.blobBR} />
+@@ -144,7 +272,7 @@ const RegisterScreen = ({ navigation }: any) => {
+           <Text style={styles.pageTitle}>TRANSITX</Text>
+         </View>
+ 
+-        {/* ── White bottom sheet (fills rest of screen) ── */}
++        {/* White bottom sheet */}
+         <View style={styles.whiteSheet}>
+           <ScrollView
+             keyboardShouldPersistTaps="handled"
+@@ -245,6 +373,82 @@ const RegisterScreen = ({ navigation }: any) => {
+                   </Text>
+                   <MaterialIcons name="keyboard-arrow-down" size={22} color="#AAAAAA" />
+                 </TouchableOpacity>
++
++                {/* Driver-only fields */}
++                {role === 'driver' && (
++                  <View style={styles.driverFields}>
++                    <Text style={styles.driverSectionTitle}>Bus Information</Text>
++                    
++                    {/* Bus Name */}
++                    <View style={getPillStyle('busName')}>
++                      <View style={styles.iconWrap}>
++                        <MaterialIcons 
++                          name="directions-bus" 
++                          size={22} 
++                          color={focusedField === 'busName' ? Colors.primary : '#AAAAAA'} 
++                        />
++                      </View>
++                      <TextInput
++                        style={styles.pillInput}
++                        placeholder="Bus Name (e.g. KumarBus)"
++                        placeholderTextColor="#BBBBBB"
++                        value={busName}
++                        onChangeText={setBusName}
++                        onFocus={() => setFocusedField('busName')}
++                        onBlur={() => setFocusedField(null)}
++                      />
++                    </View>
++
++                    {/* Bus Number */}
++                    <View style={getPillStyle('busNo')}>
++                      <View style={styles.iconWrap}>
++                        <MaterialIcons 
++                          name="numbers" 
++                          size={22} 
++                          color={focusedField === 'busNo' ? Colors.primary : '#AAAAAA'} 
++                        />
++                      </View>
++                      <TextInput
++                        style={styles.pillInput}
++                        placeholder="Bus Number (e.g. WP-NB-1234)"
++                        placeholderTextColor="#BBBBBB"
++                        value={busNo}
++                        onChangeText={setBusNo}
++                        onFocus={() => setFocusedField('busNo')}
++                        onBlur={() => setFocusedField(null)}
++                        autoCapitalize="characters"
++                      />
++                    </View>
++
++                    {/* Bus Type */}
++                    <TouchableOpacity
++                      style={[styles.inputPill, busTypeModalOpen && styles.inputPillFocused]}
++                      onPress={() => setBusTypeModalOpen(true)}
++                    >
++                      <View style={styles.iconWrap}>
++                        <MaterialIcons name="style" size={20} color={busType ? Colors.primary : '#AAA'} />
++                      </View>
++                      <Text style={[styles.pillInput, { color: busType ? '#333' : '#BBB' }]}>
++                        {selectedBusTypeLabel || 'Select Bus Type'}
++                      </Text>
++                      <MaterialIcons name="keyboard-arrow-down" size={22} color="#AAA" />
++                    </TouchableOpacity>
++
++                    {/* Seat Type */}
++                    <TouchableOpacity
++                      style={[styles.inputPill, seatTypeModalOpen && styles.inputPillFocused]}
++                      onPress={() => setSeatTypeModalOpen(true)}
++                    >
++                      <View style={styles.iconWrap}>
++                        <MaterialIcons name="airline-seat-recline-normal" size={20} color={seatType ? Colors.primary : '#AAA'} />
++                      </View>
++                      <Text style={[styles.pillInput, { color: seatType ? '#333' : '#BBB' }]}>
++                        {selectedSeatTypeLabel || 'Select Seat Count'}
++                      </Text>
++                      <MaterialIcons name="keyboard-arrow-down" size={22} color="#AAA" />
++                    </TouchableOpacity>
++                  </View>
++                )}
+               </View>
+ 
+               <View style={styles.bottomActions}>
+@@ -356,7 +560,7 @@ const styles = StyleSheet.create({
+     flexGrow: 1,
+     paddingHorizontal: wp(6),
+     paddingTop: hp(4),
+-    paddingBottom: hp(3),
++    paddingBottom: hp(10), // Increased padding for better scroll room
+   },
+   sheetInner: {
+     flex: 1,
+@@ -497,6 +701,23 @@ const styles = StyleSheet.create({
+     color: Colors.primary,
+     fontWeight: '700',
+   },
++
++  // Driver fields
++  driverFields: {
++    marginTop: 10,
++    borderTopWidth: 1,
++    borderTopColor: '#F0F0F0',
++    paddingTop: 20,
++  },
++  driverSectionTitle: {
++    fontSize: fs(14),
++    fontWeight: '700',
++    color: '#999999',
++    marginBottom: 15,
++    marginLeft: 5,
++    textTransform: 'uppercase',
++    letterSpacing: 1,
++  },
+ });
+ 
+ export default RegisterScreen;
+diff --git a/FrontEnd/src/screens/VerifyOTPScreen.tsx b/FrontEnd/src/screens/VerifyOTPScreen.tsx
+index 20d8313..e871fb5 100644
+--- a/FrontEnd/src/screens/VerifyOTPScreen.tsx
++++ b/FrontEnd/src/screens/VerifyOTPScreen.tsx
+@@ -13,7 +13,7 @@ import {
+   ScrollView,
+ } from 'react-native';
+ import AsyncStorage from '@react-native-async-storage/async-storage';
+-import apiClient from '../services/apiClient';
++import { authService } from '../services/authService';
+ import { Colors } from '../constants/Colors';
+ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+ import { wp, hp, fs } from '../utils/responsive';
+@@ -25,21 +25,18 @@ const VerifyOTPScreen = ({ route, navigation }: any) => {
+   const [isFocused, setIsFocused] = useState(false);
+ 
+   const handleVerify = async () => {
+-    if (code.length < 4) {
++    const trimmedCode = code.trim();
++    if (trimmedCode.length < 5) {
+       return Alert.alert(
+         'Invalid Code',
+-        'Please enter the full verification code.',
++        'Please enter the full 5 or 6 digit verification code.',
+       );
+     }
+ 
+     setLoading(true);
+     try {
+-      const response = await apiClient.post('/verify', {
+-        phone: phone,
+-        code: code,
+-      });
+-
+-      const { token, role } = response.data;
++      const data = await authService.verifyOtp(phone, trimmedCode);
++      const { token, role } = data;
+ 
+       if (token) {
+         await AsyncStorage.setItem('userToken', token);
+@@ -47,15 +44,22 @@ const VerifyOTPScreen = ({ route, navigation }: any) => {
+           await AsyncStorage.setItem('userRole', role);
+         }
+ 
+-        Alert.alert('Success', 'Logged in successfully!');
+-
+-        if (role === 'travel') {
+-          navigation.replace('ClassifyBus');
+-        } else if (role === 'driver') {
+-          navigation.replace('BusDetails');
+-        } else {
+-          navigation.replace('Home');
+-        }
++        Alert.alert('Success', 'Logged in successfully!', [
++          {
++            text: 'OK',
++            onPress: () => {
++              console.log('🎯 [VerifyOTP] Navigating for role:', role);
++              // Since all details (including Bus Details for drivers) are now handled 
++              // during registration, everyone can go straight to Home.
++              navigation.replace('Home');
++            },
++          },
++        ]);
++      } else {
++        // Fallback if token is missing but no error was thrown
++        Alert.alert('Login Success', 'Redirecting to Home...', [
++          { text: 'OK', onPress: () => navigation.replace('Home') }
++        ]);
+       }
+     } catch (error: any) {
+       const errorData = error.response?.data;
+diff --git a/FrontEnd/src/services/apiClient.ts b/FrontEnd/src/services/apiClient.ts
+index 8a6ed43..c64e5fa 100644
+--- a/FrontEnd/src/services/apiClient.ts
++++ b/FrontEnd/src/services/apiClient.ts
+@@ -1,31 +1,42 @@
+ import AsyncStorage from '@react-native-async-storage/async-storage';
+ import axios from 'axios';
+ 
+-// The 'Home Address' of your buddy's backend
+-const BASE_URL = 'https://travel-backend-api-t25i.onrender.com';
++// Update to use the latest IP/URL provided
++const BASE_URL = 'http://34.100.210.108'; 
+ 
+ const apiClient = axios.create({
+   baseURL: BASE_URL,
+-  timeout: 45000, // 45 seconds to handle Render's cold starts
++  timeout: 60000, // ⬆️ Increased to 60s to handle Render/Server lag
+   headers: {
+     'Content-Type': 'application/json',
+     'Accept': 'application/json',
+   },
+ });
+ 
+-// We will add the 401 Interceptor here in the next sub-task 
+-// to handle the "Token Expired" vulnerability you mentioned.
++apiClient.interceptors.request.use(
++  async (config) => {
++    const token = await AsyncStorage.getItem('userToken');
++    if (token) {
++      config.headers.Authorization = `Bearer ${token}`;
++    }
++    console.log(`[Pluto] Outgoing ${config.method?.toUpperCase()} to ${config.url}`);
++    return config;
++  },
++  (error) => Promise.reject(error)
++);
+ 
+-export default apiClient;
+ apiClient.interceptors.response.use(
+-  (response) => response,
++  (response) => {
++    console.log(`[Pluto] Response ${response.status} from ${response.config.url}`);
++    return response;
++  },
+   async (error) => {
+     if (error.response && error.response.status === 401) {
+-      // Token expired!
++      console.error('[Pluto] 401 Unauthorized - Clearing Session');
+       await AsyncStorage.removeItem('userToken');
+-      // You can trigger a navigation reset to Login here 
+-      // or use an event listener in your AppNavigator.
+     }
+     return Promise.reject(error);
+   }
+-);
+\ No newline at end of file
++);
++
++export default apiClient;
+\ No newline at end of file
+diff --git a/FrontEnd/src/services/authService.ts b/FrontEnd/src/services/authService.ts
+index 878b3cb..de48326 100644
+--- a/FrontEnd/src/services/authService.ts
++++ b/FrontEnd/src/services/authService.ts
+@@ -1,8 +1,23 @@
+ import apiClient from './apiClient';
++import AsyncStorage from '@react-native-async-storage/async-storage';
+ 
+ export const authService = {
+-  register: async (username: string, phone: string, email: string, role: string) => {
+-    console.log(' [AuthService] Calling /register:', { username, phone, email, role });
++  register: async (
++    username: string, 
++    phone: string, 
++    email: string, 
++    role: string,
++    busName?: string,
++    busNo?: string,
++    busType?: string,
++    seatType?: string
++  ) => {
++    if (!username || username.trim().length < 3) throw new Error("Username must be at least 3 characters");
++    if (!/^\d{9,10}$/.test(phone)) throw new Error("Phone must be a valid 9 or 10 digit number");
++    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Invalid email format");
++    if (!['passenger', 'driver'].includes(role)) throw new Error("Please select a valid role");
++
++    console.log('[AuthService] Calling /register:', { username, phone, email, role, busName, busNo, busType, seatType });
+     
+     try {
+       const response = await apiClient.post('/register', {
+@@ -10,40 +25,82 @@ export const authService = {
+         phone,
+         email,
+         role,
++        bus_name: busName || null,
++        bus_numbers: busNo || null,
++        bus_type: busType || null,
++        seat_type: seatType || null,
+       });
+-      console.log(' [AuthService] Register Success:', response.data);
++      console.log('[AuthService] Register Success:', response.data);
+       return response.data;
+     } catch (error: any) {
+-      const errorPayload = error.response?.data || error.message;
+-      console.error(' [AuthService] Register Error:', errorPayload);
+-      throw errorPayload;
++      const errorMsg = error.response?.data?.message || error.message || "Registration failed";
++      console.error('[AuthService] Register Error:', errorMsg);
++      throw new Error(errorMsg);
+     }
+   },
+ 
+   sendOtp: async (phone: string) => {
+-    console.log(' [AuthService] Calling /send-otp for:', phone);
++    if (!/^\d{9,10}$/.test(phone)) throw new Error("Invalid phone number format");
++
++    console.log('[AuthService] Calling /send-otp for:', phone);
+     
+     try {
+       const response = await apiClient.post('/send-otp', { phone });
+-      console.log(' [AuthService] OTP Sent Successfully:', response.data);
++      console.log('[AuthService] OTP Sent Successfully:', response.data);
+       return response.data;
+     } catch (error: any) {
+-      const errorPayload = error.response?.data || error.message;
+-      console.error(' [AuthService] Send-OTP Error:', errorPayload);
+-      throw errorPayload;
++      const errorMsg = error.response?.data?.message || error.message || "Failed to send OTP";
++      console.error('[AuthService] Send-OTP Error:', errorMsg);
++      throw new Error(errorMsg);
+     }
+   },
+ 
+   verifyOtp: async (phone: string, code: string) => {
+-    console.log(' [AuthService] Calling /verify for:', phone, 'with code:', code);
++    if (!code || code.length < 4) throw new Error("OTP code is too short");
++
++    console.log('[AuthService] Calling /verify for:', phone, 'with code:', code);
+     
+     try {
+       const response = await apiClient.post('/verify', { phone, code });
+-      console.log(' [AuthService] Verification Success:', response.data);
++      
++      if (response.data.token) {
++        await AsyncStorage.setItem('userToken', response.data.token);
++        console.log('[AuthService] Token cached successfully');
++      }
++
++      console.log('[AuthService] Verification Success:', response.data);
++      return response.data;
++    } catch (error: any) {
++      const errorMsg = error.response?.data?.message || error.message || "Verification failed";
++      console.error('[AuthService] Verification Error:', errorMsg);
++      throw new Error(errorMsg);
++    }
++  },
++
++  logout: async () => {
++    console.log('[AuthService] Calling /logout');
++    try {
++      const token = await AsyncStorage.getItem('userToken');
++      if (!token) {
++        console.log('[AuthService] No token found, skipping backend logout');
++        await AsyncStorage.removeItem('userToken');
++        return { success: true, message: 'Locally logged out' };
++      }
++
++      const response = await apiClient.post('/logout');
++      await AsyncStorage.removeItem('userToken');
++      console.log('[AuthService] Logout Success:', response.data);
+       return response.data;
+     } catch (error: any) {
+       const errorPayload = error.response?.data || error.message;
+-      console.error(' [AuthService] Verification Error:', errorPayload);
++      await AsyncStorage.removeItem('userToken'); 
++      
++      if (errorPayload?.message?.includes('bearer token')) {
++        console.warn('[AuthService] Backend rejected logout (invalid/missing token), but local session is cleared.');
++        return { success: true, message: 'Local session cleared' };
++      }
++
++      console.error('[AuthService] Logout Error:', errorPayload);
+       throw errorPayload;
+     }
+   },
+@@ -54,17 +111,25 @@ export const authService = {
+     busType: string;
+     seatType: string;
+   }) => {
+-    console.log(' [AuthService] Saving Bus Details:', busInfo);
++    console.log('[AuthService] Saving Bus Details:', busInfo);
+     try {
+-      // In a real app, this would be an API call like:
+-      // const response = await apiClient.post('/driver/bus-details', busInfo);
+-      // return response.data;
++      const payload = {
++        ...busInfo,
++        travels_name: null,
++        travels_number: null,
++        BusesNumbers: [],
++      };
++      console.log('[AuthService] Sending Payload:', payload);
+       
+-      // For now, we simulate a successful API call
+-      return new Promise((resolve) => setTimeout(() => resolve({ success: true }), 1000));
++      return new Promise((resolve) => {
++        setTimeout(() => {
++          console.log('[AuthService] Bus Details Saved (Simulated)');
++          resolve({ success: true });
++        }, 1000);
++      });
+     } catch (error: any) {
+       const errorPayload = error.response?.data || error.message;
+-      console.error(' [AuthService] Save Bus Details Error:', errorPayload);
++      console.error('[AuthService] Save Bus Details Error:', errorPayload);
+       throw errorPayload;
+     }
+   }
