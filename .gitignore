@@ -46,3 +46,6 @@ yarn-error.log*
 *.rar
 *.tar
 *.zip
+
+# Custom files
+diff.txt
