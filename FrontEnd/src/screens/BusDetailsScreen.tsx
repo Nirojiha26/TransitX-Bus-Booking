@@ -61,7 +61,13 @@ const BusDetailsScreen = ({ navigation }: any) => {
         seatType,
       });
       Alert.alert('Success', 'Profile setup complete!', [
-        { text: 'OK', onPress: () => navigation.replace('Home') }
+        { 
+          text: 'OK', 
+          onPress: () => navigation.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+          }) 
+        }
       ]);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to save details');

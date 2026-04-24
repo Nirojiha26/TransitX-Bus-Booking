@@ -51,14 +51,17 @@ const VerifyOTPScreen = ({ route, navigation }: any) => {
               console.log('🎯 [VerifyOTP] Navigating for role:', role);
               // Since all details (including Bus Details for drivers) are now handled 
               // during registration, everyone can go straight to Home.
-              navigation.replace('Home');
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Home' }],
+              });
             },
           },
         ]);
       } else {
         // Fallback if token is missing but no error was thrown
         Alert.alert('Login Success', 'Redirecting to Home...', [
-          { text: 'OK', onPress: () => navigation.replace('Home') }
+          { text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Home' }] }) }
         ]);
       }
     } catch (error: any) {
