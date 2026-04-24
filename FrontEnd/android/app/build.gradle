@@ -84,7 +84,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "0.002"
+        versionName "0.003"
     }
     signingConfigs {
         debug {
@@ -124,6 +124,9 @@ dependencies {
     // ─── PLUTO 2.x CONFIGURATION ───
     debugImplementation "com.plutolib:pluto:2.2.0"
     debugImplementation "com.plutolib.plugins:network:2.2.0"
-    // Use this specific interceptor artifact for 2.x
     debugImplementation "com.plutolib.plugins:network-interceptor-okhttp:2.2.0"
+
+    releaseImplementation "com.plutolib:pluto-no-op:2.2.0"
+    releaseImplementation "com.plutolib.plugins:network-no-op:2.2.0"
+    releaseImplementation "com.plutolib.plugins:network-interceptor-okhttp-no-op:2.2.0"
 }

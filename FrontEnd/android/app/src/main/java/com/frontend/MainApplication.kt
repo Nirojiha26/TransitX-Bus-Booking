@@ -30,21 +30,24 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     
-    // --- 1. INITIALIZE PLUTO (2.2.0 Syntax) ---
-    Pluto.Installer(this)
-        .addPlugin(PlutoNetworkPlugin())
-        .install()
-    Pluto.showNotch(true)
+    // --- INITIALIZE PLUTO ONLY IN DEBUG ---
+    if (BuildConfig.DEBUG) {
+        // --- 1. INITIALIZE PLUTO (2.2.0 Syntax) ---
+        Pluto.Installer(this)
+            .addPlugin(PlutoNetworkPlugin())
+            .install()
+        Pluto.showNotch(true)
 
-    // --- 2. SETUP NETWORK INTERCEPTOR ---
-    OkHttpClientProvider.setOkHttpClientFactory(object : OkHttpClientFactory {
-        override fun createNewNetworkModuleClient(): OkHttpClient {
-            android.util.Log.d("PlutoInit", "Creating new OkHttpClient with PlutoInterceptor")
-            return OkHttpClientProvider.createClientBuilder()
-                .addInterceptor(PlutoOkhttpInterceptor)
-                .build()
-        }
-    })
+        // --- 2. SETUP NETWORK INTERCEPTOR ---
+        OkHttpClientProvider.setOkHttpClientFactory(object : OkHttpClientFactory {
+            override fun createNewNetworkModuleClient(): OkHttpClient {
+                android.util.Log.d("PlutoInit", "Creating new OkHttpClient with PlutoInterceptor")
+                return OkHttpClientProvider.createClientBuilder()
+                    .addInterceptor(PlutoOkhttpInterceptor)
+                    .build()
+            }
+        })
+    }
 
     loadReactNative(this)
   }
